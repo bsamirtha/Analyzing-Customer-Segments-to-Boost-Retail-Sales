@@ -3,7 +3,7 @@
 
 ## Project Overview
 
-In this project, I explored a retail sales dataset to understand customer behavior and product sales patterns. Using **SQL**, I performed **RFM (Recency, Frequency, Monetary)** analysis to segment customers based on their past purchase behavior. The results were visualized through a dynamic sales dashboard created in **Tableau** and **Power BI**. This helped uncover valuable insights that guided business solutions aimed at improving customer retention and increasing sales.
+In this project, I explored a retail sales dataset to understand customer behavior and product sales patterns. Using **SQL**, I performed **RFM (Recency, Frequency, Monetary)** analysis to segment customers based on their past purchase behavior. The results were visualized through a dynamic sales dashboard created in **Power BI**. This helped uncover valuable insights that guided business solutions aimed at improving customer retention and increasing sales.
 
 ## Tools Used
 
