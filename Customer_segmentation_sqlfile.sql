@@ -1,6 +1,4 @@
--- Step 1: Reset the database environment
--- Drop the existing database to start fresh and create a new one.
-DROP DATABASE IF EXISTS sales_db;
+-- Step 1: Create the database environment
 CREATE DATABASE sales_db;
 USE sales_db;
 
