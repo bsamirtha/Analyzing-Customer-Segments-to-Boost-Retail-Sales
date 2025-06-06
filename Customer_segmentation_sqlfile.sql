@@ -11,7 +11,7 @@ SELECT * FROM sales_data_sample_project LIMIT 10;
 -- Helps understand overall sales volume.
 SELECT SUM(SALES) AS total_sales 
 FROM sales_data_sample_project;
--- Expected output: total sales value (e.g., 10,032,628)
+-- Expected output: total sales value 10032628.85
 
 -- Step 3: Identify the top 5 customers by total sales
 -- Useful for targeting key customers or VIP programs.
@@ -26,7 +26,8 @@ LIMIT 5;
 SELECT MONTH_ID, SUM(SALES) AS monthly_sales
 FROM sales_data_sample_project
 GROUP BY MONTH_ID
-ORDER BY MONTH_ID;
+ORDER BY monthly_sales DESC;
+
 
 -- Step 5: Sales by product line
 -- Understand which product lines contribute most to revenue.
@@ -57,11 +58,11 @@ FROM sales_data_sample_project
 WHERE YEAR_ID = 2003
 ORDER BY 1;
 
--- Step 8: Revenue by product line (detailed revenue analysis)
-SELECT PRODUCTLINE, SUM(SALES) AS REVENUE 
+SELECT DISTINCT MONTH_ID 
 FROM sales_data_sample_project
-GROUP BY PRODUCTLINE
-ORDER BY REVENUE DESC;
+WHERE YEAR_ID = 2004
+ORDER BY 1;
+
 
 -- Step 9: Revenue by year
 -- Understand revenue trends over years.
@@ -94,17 +95,18 @@ ORDER BY REVENUE DESC;
 
 -- Step 13: Top products in the USA by year and product line
 -- Product-level analysis in the USA market.
-SELECT COUNTRY, YEAR_ID, PRODUCTLINE, SUM(SALES) AS REVENUE
+SELECT CITY, COUNTRY, SUM(SALES) AS REVENUE
 FROM sales_data_sample_project
 WHERE COUNTRY = 'USA'
-GROUP BY COUNTRY, YEAR_ID, PRODUCTLINE
+GROUP BY CITY, COUNTRY
 ORDER BY REVENUE DESC;
+
 
 -- Step 14: Best month for sales in a selected year (2004 example)
 -- Identify peak months for targeted marketing or inventory planning.
 SELECT MONTH_ID, SUM(SALES) AS REVENUE, COUNT(ORDERNUMBER) AS FREQUENCY 
 FROM sales_data_sample_project
-WHERE YEAR_ID = 2004 -- Modify year as needed (e.g., 2003, 2005)
+WHERE YEAR_ID = 2005 -- Modify year as needed (e.g., 2003, 2005)
 GROUP BY MONTH_ID
 ORDER BY REVENUE DESC;
 
@@ -128,45 +130,67 @@ SELECT
     SUM(SALES) AS MonetaryValue,
     AVG(SALES) AS AvgMonetaryValue,
     COUNT(ORDERNUMBER) AS Frequency,
-    MAX(STR_TO_DATE(ORDERDATE, '%Y-%m-%d')) AS LastOrderDate,
-    (SELECT MAX(STR_TO_DATE(ORDERDATE, '%Y-%m-%d')) FROM sales_data_sample_project) AS MaxOrderDate,
+    MAX(STR_TO_DATE(ORDERDATE, '%c/%e/%Y %H:%i')) AS LastOrderDate,
+    (SELECT MAX(STR_TO_DATE(ORDERDATE, '%c/%e/%Y %H:%i')) FROM sales_data_sample_project) AS MaxOrderDate,
     DATEDIFF(
-        (SELECT MAX(STR_TO_DATE(ORDERDATE, '%Y-%m-%d')) FROM sales_data_sample_project),
-        MAX(STR_TO_DATE(ORDERDATE, '%Y-%m-%d'))
+        (SELECT MAX(STR_TO_DATE(ORDERDATE, '%c/%e/%Y %H:%i')) FROM sales_data_sample_project),
+        MAX(STR_TO_DATE(ORDERDATE, '%c/%e/%Y %H:%i'))
     ) AS Recency
 FROM sales_data_sample_project
 GROUP BY CUSTOMERNAME;
 
--- Step 17: Drop the old RFM final table if exists and create new one with RFM scores (quartiles)
-DROP TEMPORARY TABLE IF EXISTS rfm_final;
 
-CREATE TEMPORARY TABLE rfm_final AS
-WITH rfm AS (
+-- Step 17: Drop the old RFM final table if exists and create new one with RFM scores (quartiles)
+WITH rfm_base AS (
     SELECT
         CUSTOMERNAME,
         SUM(SALES) AS MonetaryValue,
         AVG(SALES) AS AvgMonetaryValue,
         COUNT(ORDERNUMBER) AS Frequency,
-        MAX(ORDERDATE) AS LastOrderDate,
-        (SELECT MAX(ORDERDATE) FROM sales_data_sample_project) AS MaxOrderDate,
-        DATEDIFF((SELECT MAX(ORDERDATE) FROM sales_data_sample_project), MAX(ORDERDATE)) AS Recency
+        MAX(STR_TO_DATE(ORDERDATE, '%c/%e/%Y %H:%i')) AS LastOrderDate,
+        DATEDIFF(
+            (SELECT MAX(STR_TO_DATE(ORDERDATE, '%c/%e/%Y %H:%i')) FROM sales_data_sample_project),
+            MAX(STR_TO_DATE(ORDERDATE, '%c/%e/%Y %H:%i'))
+        ) AS Recency
     FROM sales_data_sample_project
     GROUP BY CUSTOMERNAME
 ),
-rfm_calc AS (
-    -- Assign quartiles to each metric: Recency (descending), Frequency (ascending), Monetary (ascending)
+rfm_scored AS (
     SELECT *,
         NTILE(4) OVER (ORDER BY Recency DESC) AS rfm_recency,
         NTILE(4) OVER (ORDER BY Frequency) AS rfm_frequency,
         NTILE(4) OVER (ORDER BY MonetaryValue) AS rfm_monetary
-    FROM rfm
+    FROM rfm_base
+),
+rfm_final AS (
+    SELECT *,
+        (rfm_recency + rfm_frequency + rfm_monetary) AS rfm_cell,
+        CONCAT(rfm_recency, rfm_frequency, rfm_monetary) AS rfm_cell_string
+    FROM rfm_scored
 )
-SELECT *,
-    -- Sum of quartile ranks to form a composite RFM score
-    (rfm_recency + rfm_frequency + rfm_monetary) AS rfm_cell,
-    -- Concatenate quartiles for detailed segment analysis
-    CONCAT(rfm_recency, rfm_frequency, rfm_monetary) AS rfm_cell_string
-FROM rfm_calc;
+SELECT 
+    CUSTOMERNAME,
+    MonetaryValue,
+    Frequency,
+    Recency,
+    rfm_recency,
+    rfm_frequency,
+    rfm_monetary,
+    rfm_cell,
+    rfm_cell_string,
+    CASE
+        WHEN rfm_cell_string IN ('111','112','121','122','123','132','211','212','114','141','221') THEN 'Lost Customer'
+        WHEN rfm_cell_string IN ('133','134','143','244','334','343','344','144') THEN 'Slipping Away'
+        WHEN rfm_cell_string IN ('311','411','331','421','412') THEN 'New Customer'
+        WHEN rfm_cell_string IN ('222','223','233','322','232','234') THEN 'Potential Churners'
+        WHEN rfm_cell_string IN ('323','333','321','422','332','432','423') THEN 'Active'
+        WHEN rfm_cell_string IN ('433','434','443','444') THEN 'Loyal'
+        ELSE 'Unclassified'
+    END AS CustomerSegment
+FROM rfm_final;
+
+
+
 
 -- Step 18: Review the RFM scores and segmentation
 SELECT * FROM rfm_final;
